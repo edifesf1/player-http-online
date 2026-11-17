@@ -1,0 +1,133 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player HTTP Online</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;background:#101010;color:#fff;
+  font-family:Arial,sans-serif;padding:20px;
+}
+main{max-width:950px;margin:30px auto}
+h1{text-align:center;color:#f5c400}
+p{text-align:center;color:#bbb}
+input{
+  width:100%;padding:15px;border:1px solid #555;
+  background:#222;color:white;border-radius:7px;
+  font-size:15px;margin:12px 0;
+}
+button{
+  width:100%;padding:15px;border:0;border-radius:7px;
+  background:#e4b900;color:#000;font-weight:bold;
+  font-size:16px;cursor:pointer;
+}
+video{
+  width:100%;background:#000;margin-top:20px;
+  aspect-ratio:16/9;border-radius:8px;
+}
+#status{text-align:center;color:#ccc;margin-top:15px}
+footer{text-align:center;color:#777;font-size:12px;margin-top:25px}
+</style>
+</head>
+<body>
+<main>
+<h1>PLAYER HTTP ONLINE</h1>
+<p>Reproduza suas transmissões M3U8</p>
+
+<input id="url" type="url"
+value="http://170.83.16.50/FUTURA/index.m3u8"
+placeholder="Cole o endereço M3U8 aqui">
+
+<button id="play">CARREGAR TRANSMISSÃO</button>
+
+<video id="video" controls playsinline
+autoplay></video>
+
+<div id="status">Aguardando transmissão...</div>
+
+<footer>Player HTTP Online</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"></script>
+<script>
+const video = document.getElementById("video");
+const campo = document.getElementById("url");
+const status = document.getElementById("status");
+let hls = null;
+
+function iniciar(){
+  const endereco = campo.value.trim();
+
+  if(!endereco){
+    status.textContent = "Informe um endereço M3U8.";
+    return;
+  }
+
+  try{
+    const original = new URL(endereco);
+    if(!["http:","https:"].includes(original.protocol)){
+      throw new Error("Use um endereço HTTP ou HTTPS.");
+    }
+  }catch(e){
+    status.textContent = "Endereço inválido: " + e.message;
+    return;
+  }
+
+  if(hls){
+    hls.destroy();
+    hls = null;
+  }
+
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+
+  const proxy = "/proxy?url=" + encodeURIComponent(endereco);
+
+  status.textContent = "Conectando à transmissão...";
+
+  if(Hls.isSupported()){
+    hls = new Hls({
+      enableWorker:true,
+      lowLatencyMode:false
+    });
+
+    hls.loadSource(proxy);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{
+      status.textContent = "Transmissão carregada!";
+      video.play().catch(()=> {
+        status.textContent = "Clique em Play para iniciar.";
+      });
+    });
+
+    hls.on(Hls.Events.ERROR,(event,data)=>{
+      if(data.fatal){
+        status.textContent =
+          "Erro na transmissão: " + data.details;
+      }
+    });
+
+  }else if(video.canPlayType("application/vnd.apple.mpegurl")){
+    video.src = proxy;
+    video.addEventListener("loadedmetadata",()=>{
+      video.play().catch(()=>{});
+      status.textContent = "Transmissão carregada!";
+    },{once:true});
+  }else{
+    status.textContent = "Este navegador não suporta HLS.";
+  }
+}
+
+document.getElementById("play").addEventListener("click",iniciar);
+
+campo.addEventListener("keydown",e=>{
+  if(e.key==="Enter") iniciar();
+});
+</script>
+</body>
+</html>
