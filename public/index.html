@@ -62,17 +62,19 @@ const status = document.getElementById("status");
 
 let hls = null;
 
-function iniciar(){
+async function iniciar(){
 
-  const endereco = campo.value.trim();
+  const enderecoInformado = campo.value.trim();
 
-  if(!endereco){
+  if(!enderecoInformado){
     status.textContent = "Informe um endereço M3U8.";
     return;
   }
 
+  let original;
+
   try{
-    const original = new URL(endereco);
+    original = new URL(enderecoInformado);
 
     if(!["http:","https:"].includes(original.protocol)){
       throw new Error("Use um endereço HTTP ou HTTPS.");
@@ -92,7 +94,30 @@ function iniciar(){
   video.removeAttribute("src");
   video.load();
 
-  const proxy = "/proxy?url=" + encodeURIComponent(endereco);
+  status.textContent = "Verificando endereço da transmissão...";
+
+  let enderecoFinal = original.href;
+
+  try{
+    const respostaResolver = await fetch(
+      "/resolver?url=" + encodeURIComponent(enderecoInformado),
+      {cache:"no-store"}
+    );
+
+    const dadosResolver = await respostaResolver.json();
+
+    if(!respostaResolver.ok){
+      throw new Error(dadosResolver.erro || "Não foi possível resolver o endereço.");
+    }
+
+    enderecoFinal = dadosResolver.url || enderecoInformado;
+
+  }catch(e){
+    status.textContent = "Erro ao verificar endereço: " + e.message;
+    return;
+  }
+
+  const proxy = "/proxy?url=" + encodeURIComponent(enderecoFinal);
 
   status.textContent = "Conectando à transmissão...";
 
