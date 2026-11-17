@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Player HTTP Online</title>
+
 <style>
 *{box-sizing:border-box}
 body{
@@ -32,33 +33,37 @@ video{
 footer{text-align:center;color:#777;font-size:12px;margin-top:25px}
 </style>
 </head>
+
 <body>
 <main>
+
 <h1>PLAYER HTTP ONLINE</h1>
 <p>Reproduza suas transmissões M3U8</p>
 
 <input id="url" type="url"
-value="http://170.83.16.50/FUTURA/index.m3u8"
 placeholder="Cole o endereço M3U8 aqui">
 
 <button id="play">CARREGAR TRANSMISSÃO</button>
 
-<video id="video" controls playsinline
-autoplay></video>
+<video id="video" controls playsinline autoplay></video>
 
 <div id="status">Aguardando transmissão...</div>
 
 <footer>Player HTTP Online</footer>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"></script>
+
 <script>
 const video = document.getElementById("video");
 const campo = document.getElementById("url");
 const status = document.getElementById("status");
+
 let hls = null;
 
 function iniciar(){
+
   const endereco = campo.value.trim();
 
   if(!endereco){
@@ -68,9 +73,11 @@ function iniciar(){
 
   try{
     const original = new URL(endereco);
+
     if(!["http:","https:"].includes(original.protocol)){
       throw new Error("Use um endereço HTTP ou HTTPS.");
     }
+
   }catch(e){
     status.textContent = "Endereço inválido: " + e.message;
     return;
@@ -90,6 +97,7 @@ function iniciar(){
   status.textContent = "Conectando à transmissão...";
 
   if(Hls.isSupported()){
+
     hls = new Hls({
       enableWorker:true,
       lowLatencyMode:false
@@ -99,27 +107,40 @@ function iniciar(){
     hls.attachMedia(video);
 
     hls.on(Hls.Events.MANIFEST_PARSED,()=>{
+
       status.textContent = "Transmissão carregada!";
-      video.play().catch(()=> {
+
+      video.play().catch(()=>{
         status.textContent = "Clique em Play para iniciar.";
       });
+
     });
 
     hls.on(Hls.Events.ERROR,(event,data)=>{
+
       if(data.fatal){
         status.textContent =
           "Erro na transmissão: " + data.details;
       }
+
     });
 
   }else if(video.canPlayType("application/vnd.apple.mpegurl")){
+
     video.src = proxy;
+
     video.addEventListener("loadedmetadata",()=>{
+
       video.play().catch(()=>{});
+
       status.textContent = "Transmissão carregada!";
+
     },{once:true});
+
   }else{
+
     status.textContent = "Este navegador não suporta HLS.";
+
   }
 }
 
@@ -128,6 +149,22 @@ document.getElementById("play").addEventListener("click",iniciar);
 campo.addEventListener("keydown",e=>{
   if(e.key==="Enter") iniciar();
 });
+
+// ABRIR AUTOMATICAMENTE PELO PARÂMETRO URL
+
+const parametros = new URLSearchParams(window.location.search);
+const urlInicial = parametros.get("url");
+
+if(urlInicial){
+
+  campo.value = urlInicial;
+
+  window.addEventListener("load",()=>{
+    iniciar();
+  });
+
+}
 </script>
+
 </body>
 </html>
