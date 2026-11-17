@@ -95,6 +95,107 @@ function reescreverPlaylist(texto, baseUrl) {
   }).join("\n");
 }
 
+
+// Resolve arquivos de referência M3U8 hospedados no GitHub Raw.
+// Esses arquivos contêm somente a URL real da transmissão, não uma playlist HLS.
+async function buscarComRedirecionamentos(urlInicial) {
+  let destino = await validarDestino(urlInicial);
+  let resposta;
+
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    resposta = await fetch(destino.href, {
+      redirect: "manual",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; HLSPlayer/1.0)",
+        "Accept": "*/*"
+      }
+    });
+
+    if (![301, 302, 303, 307, 308].includes(resposta.status)) {
+      break;
+    }
+
+    const local = resposta.headers.get("location");
+    if (!local) throw new Error("Redirecionamento inválido.");
+
+    destino = await validarDestino(new URL(local, destino).href);
+  }
+
+  if (!resposta || [301, 302, 303, 307, 308].includes(resposta.status)) {
+    throw new Error("Limite de redirecionamentos atingido.");
+  }
+
+  return { destino, resposta };
+}
+
+app.get("/resolver", async (req, res) => {
+  try {
+    const valor = req.query.url;
+
+    if (typeof valor !== "string" || valor.length > 8000) {
+      return res.status(400).json({ erro: "URL inválida." });
+    }
+
+    const origem = await validarDestino(valor);
+
+    // Links diretos continuam sem alteração. Só precisamos ler os arquivos
+    // de texto publicados no endpoint GitHub Raw.
+    if (origem.hostname.toLowerCase() !== "raw.githubusercontent.com") {
+      return res.json({ url: origem.href });
+    }
+
+    const { destino, resposta } = await buscarComRedirecionamentos(origem.href);
+
+    if (!resposta.ok) {
+      return res.status(502).json({
+        erro: "Não foi possível ler o arquivo de referência (HTTP " + resposta.status + ")."
+      });
+    }
+
+    const texto = await resposta.text();
+
+    if (texto.length > 128 * 1024) {
+      return res.status(413).json({ erro: "Arquivo de referência muito grande." });
+    }
+
+    // Playlist HLS verdadeira: mantém o endereço original para o proxy atual.
+    if (/^\s*#EXTM3U\b/m.test(texto)) {
+      return res.json({ url: destino.href });
+    }
+
+    // Arquivo de referência: procura a primeira linha que contenha uma URL.
+    const linhaUrl = texto
+      .split(/\r?\n/)
+      .map(linha => linha.trim())
+      .find(linha => linha && !linha.startsWith("#"));
+
+    if (!linhaUrl) {
+      return res.status(422).json({
+        erro: "O arquivo não contém uma URL de transmissão."
+      });
+    }
+
+    let enderecoReal;
+    try {
+      enderecoReal = new URL(linhaUrl, destino.href);
+    } catch {
+      return res.status(422).json({ erro: "A URL dentro do arquivo é inválida." });
+    }
+
+    if (!["http:", "https:"].includes(enderecoReal.protocol)) {
+      return res.status(422).json({ erro: "A URL da transmissão deve usar HTTP ou HTTPS." });
+    }
+
+    // Valida também o destino extraído para impedir endereços locais/privados.
+    const urlValidada = await validarDestino(enderecoReal.href);
+
+    return res.json({ url: urlValidada.href });
+  } catch (erro) {
+    console.error("Erro ao resolver referência:", erro.message);
+    return res.status(502).json({ erro: "Falha ao resolver endereço: " + erro.message });
+  }
+});
+
 app.get("/proxy", async (req, res) => {
   try {
     const valor = req.query.url;
